@@ -1,5 +1,5 @@
 # 🤖 ChatAction Simulator Bot — Keep Your Telegram Presence Alive  
-[![Telegram Bot](https://img.shields.io/badge/Launch%20Bot-@YourInstaDLBot-2CA5E0?logo=telegram&style=for-the-badge)](https://t.me/WorkGlows)
+[![Telegram Bot](https://img.shields.io/badge/Launch%20Bot-@WorkGlows-2CA5E0?logo=telegram&style=for-the-badge)](https://t.me/WorkGlows)
 > **Real-time. Reactive. Silent.**  
 > This bot mimics user activity like "typing...", "uploading photo...", and more whenever someone texts your bot — perfect for faking presence, demoing, or trolling.
 

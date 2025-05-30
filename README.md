@@ -62,8 +62,8 @@
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-username/chat-action-simulator-bot.git
-cd chat-action-simulator-bot
+git clone https://github.com/asadofc/indicators-bot.git
+cd indicators-bot
 
 # 2. Create & activate a virtual environment
 python3 -m venv venv

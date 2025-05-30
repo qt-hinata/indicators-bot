@@ -57,23 +57,3 @@
 </p>
 
 ---
-
-## 🚀 How to Run
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/asadofc/indicators-bot.git
-cd indicators-bot
-
-# 2. Create & activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate         # Windows: venv\Scripts\activate
-
-# 3. Install required packages
-pip install -r requirements.txt
-
-# 4. Set your bot tokens (comma-separated if multiple)
-export BOT_TOKENS="123456:ABC-DEF1234ghIkl,987654:XYZ-321abcDEF"
-
-# 5. Run the bot
-python bot.py

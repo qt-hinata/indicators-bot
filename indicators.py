@@ -13,9 +13,9 @@ from telegram.ext import (
 # ---------------- Flask SETUP ----------------
 flask_app = Flask(__name__)
 
-@flask_app.route("/")
+@flask_app.route("/", methods=["GET"])
 def index():
-    return "OK"
+    return "OK", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))

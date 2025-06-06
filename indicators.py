@@ -97,8 +97,8 @@ async def run_bot(token, action: ChatAction):
         # 2) Start simulating the chosen “typing/uploading/etc.” action immediately
         chat_id = chat.id
         task_key = f"{context.bot.token}_{chat_id}"
-        if task_key not in context.application.chat_data:
-            context.application.chat_data[task_key] = asyncio.create_task(
+        if task_key not in context.chat_data:
+            context.chat_data[task_key] = asyncio.create_task(
                 simulate_action(chat_id, context.application, action)
             )
 

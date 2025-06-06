@@ -17,6 +17,10 @@ flask_app = Flask(__name__)
 def index():
     return "OK", 200
 
+@flask_app.route("/healthz", methods=["GET", "HEAD"])
+def health_check():
+    return "OK", 200
+
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     # bind to 0.0.0.0 so Render can route external requests

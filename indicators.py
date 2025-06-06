@@ -64,8 +64,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2nd row: Add Me To Your Group
     keyboard = [
         [
-            InlineKeyboardButton(text="Updates", url="https://t.me/YOUR_CHANNEL_URL"),
-            InlineKeyboardButton(text="Support", url="https://t.me/YOUR_SUPPORT_GROUP_URL"),
+            InlineKeyboardButton(text="Updates", url="https://t.me/WorkGlows"),
+            InlineKeyboardButton(text="Support", url="https://t.me/TheCryptoElders"),
         ],
         [
             InlineKeyboardButton(

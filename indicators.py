@@ -1,5 +1,7 @@
 import asyncio
 import os
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.constants import ChatAction, ChatType
 from telegram.ext import (
@@ -8,6 +10,19 @@ from telegram.ext import (
     ContextTypes,
 )
 
+# ---------------- Flask SETUP ----------------
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def index():
+    return "OK"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    # bind to 0.0.0.0 so Render can route external requests
+    flask_app.run(host="0.0.0.0", port=port, threaded=True, use_reloader=False)
+
+# ------------- Telegram‐bot SETUP -------------
 # Read tokens from environment variable
 BOT_TOKENS = os.getenv("BOT_TOKENS", "").split(",")
 if not BOT_TOKENS or BOT_TOKENS == [""]:
@@ -76,7 +91,7 @@ async def run_bot(token, action: ChatAction):
     "• Super simple to set up—just add and go!\n\n"
     "🚀 <b>Tap /start to begin the magic.</b>\n"
     "👇 Or use the buttons below for support and adding me to your group!"
-		)
+        )
         await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="HTML")
 
         # 2) Start simulating the chosen “typing/uploading/etc.” action immediately
@@ -108,14 +123,20 @@ async def run_bot(token, action: ChatAction):
 
 # ------------- Main entrypoint -------------
 async def main():
-    # Launch one Application per BOT_TOKEN + ChatAction (zipped together)
+    # 1) Start all bot instances concurrently
     apps = await asyncio.gather(
         *(run_bot(token, action) for token, action in zip(BOT_TOKENS, ACTIONS))
     )
 
-    # Keep the script alive forever
+    # 2) Keep the script alive forever
     while True:
         await asyncio.sleep(3600)
 
 if __name__ == "__main__":
+    # Start Flask in a separate thread so it doesn’t block the asyncio loop
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    # Then run your existing bots via asyncio
     asyncio.run(main())

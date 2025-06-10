@@ -1,7 +1,6 @@
 import asyncio
 import os
 import threading
-from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.constants import ChatAction, ChatType
 from telegram.ext import (
@@ -10,21 +9,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ---------------- Flask SETUP ----------------
-flask_app = Flask(__name__)
-
-@flask_app.route("/", methods=["GET"])
-def index():
-    return "OK", 200
-
-@flask_app.route("/healthz", methods=["GET", "HEAD"])
-def health_check():
-    return "OK", 200
-
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    # bind to 0.0.0.0 so Render can route external requests
-    flask_app.run(host="0.0.0.0", port=port, threaded=True, use_reloader=False)
+# ─── Imports for Dummy HTTP Server ──────────────────────────────────────────
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ------------- Telegram‐bot SETUP -------------
 # Read tokens from environment variable
@@ -135,12 +122,26 @@ async def main():
     # 2) Keep the script alive forever
     while True:
         await asyncio.sleep(3600)
+        
+# ─── Dummy HTTP Server to Keep Render Happy ─────────────────────────────────
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"AFK bot is alive!")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
+def start_dummy_server():
+    port = int(os.environ.get("PORT", 10000))  # Render injects this
+    server = HTTPServer(("0.0.0.0", port), DummyHandler)
+    print(f"Dummy server listening on port {port}")
+    server.serve_forever()
 
 if __name__ == "__main__":
-    # Start Flask in a separate thread so it doesn’t block the asyncio loop
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
 
-    # Then run your existing bots via asyncio
+    # Start dummy HTTP server (needed for Render health check)
+    threading.Thread(target=start_dummy_server, daemon=True).start()
     asyncio.run(main())

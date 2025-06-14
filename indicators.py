@@ -1,6 +1,6 @@
 """
 Telegram Multi-Bot Service for Render Deployment
-Compatible with python-telegram-bot v20.7 - simulates chat actions to keep groups active
+Direct polling implementation that avoids Updater API issues
 """
 
 import asyncio
@@ -12,8 +12,9 @@ import threading
 from typing import Dict, List, Optional
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
+import json
 
-# Configure logging first
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -21,37 +22,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import telegram components with error handling
+# Import telegram components
 try:
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, Bot as TelegramBot
     from telegram.constants import ChatAction, ChatType
-    from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes
     from telegram.error import NetworkError, BadRequest, TelegramError
     logger.info("Telegram imports successful")
 except ImportError as e:
-    logger.error(f"Cannot import telegram library: {e}")
-    logger.error("Please ensure python-telegram-bot is properly installed")
+    logger.error(f"Import error: {e}")
     sys.exit(1)
 
-# Reduce external library noise
+# Reduce noise
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-# Environment configuration
+# Configuration
 BOT_TOKENS = os.getenv("BOT_TOKENS", "").split(",")
 if not BOT_TOKENS or BOT_TOKENS == [""]:
-    logger.error("BOT_TOKENS environment variable is required")
-    logger.error("Set BOT_TOKENS with comma-separated bot tokens")
+    logger.error("BOT_TOKENS environment variable required")
     sys.exit(1)
 
 BOT_TOKENS = [token.strip() for token in BOT_TOKENS if token.strip()]
 if not BOT_TOKENS:
-    logger.error("No valid bot tokens found in BOT_TOKENS")
+    logger.error("No valid tokens")
     sys.exit(1)
 
-# Available chat actions for simulation
-CHAT_ACTIONS = [
+# Actions
+ACTIONS = [
     ChatAction.TYPING,
     ChatAction.UPLOAD_PHOTO,
     ChatAction.RECORD_VIDEO,
@@ -66,209 +63,188 @@ CHAT_ACTIONS = [
 ]
 
 # Global state
-bot_instances: List['TelegramBot'] = []
-shutdown_event = threading.Event()
-health_server = None
+active_bots = []
+shutdown_signal = threading.Event()
+http_server = None
 
 
-class TelegramBot:
-    """Individual Telegram bot instance with action simulation capabilities"""
+class BotInstance:
+    """Bot with direct polling"""
     
     def __init__(self, token: str, action: ChatAction):
         self.token = token
         self.action = action
-        self.app: Optional[Application] = None
-        self.active_simulations: Dict[int, asyncio.Task] = {}
-        self.is_running = False
+        self.bot = TelegramBot(token)
+        self.simulations = {}
+        self.running = False
         self.bot_info = None
-        
-    async def initialize(self) -> bool:
-        """Initialize the bot application and configure handlers"""
+        self.offset = 0
+    
+    async def initialize(self):
+        """Initialize bot"""
         try:
-            # Build the application
-            self.app = ApplicationBuilder().token(self.token).build()
-            
-            # Add command handlers
-            self.app.add_handler(CommandHandler("start", self.handle_start_command))
-            
-            # Initialize application
-            await self.app.initialize()
-            
-            # Get bot information
-            self.bot_info = await self.app.bot.get_me()
-            
-            # Set bot commands in menu
-            commands = [BotCommand("start", "Activate bot and start group activity simulation")]
-            await self.app.bot.set_my_commands(commands)
-            
+            self.bot_info = await self.bot.get_me()
+            commands = [BotCommand("start", "Start activity simulation")]
+            await self.bot.set_my_commands(commands)
             logger.info(f"Bot @{self.bot_info.username} initialized for {self.action}")
             return True
-            
         except Exception as e:
-            logger.error(f"Failed to initialize bot for {self.action}: {e}")
+            logger.error(f"Initialize error for {self.action}: {e}")
             return False
     
-    async def handle_start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command"""
-        if not update.effective_chat or not update.message:
-            return
-            
-        chat = update.effective_chat
-        
-        # Only respond in supported chat types
-        if chat.type not in [ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP]:
-            return
-            
+    async def handle_update(self, update_data: dict):
+        """Handle incoming update"""
         try:
-            # Prepare bot information
-            bot_username = self.bot_info.username if self.bot_info else "bot"
-            group_invite_url = f"https://t.me/{bot_username}?startgroup=true"
+            update = Update.de_json(update_data, self.bot)
+            if not update or not update.message:
+                return
             
-            # Create inline keyboard
+            message = update.message
+            if not message.text or not message.text.startswith('/start'):
+                return
+            
+            chat = message.chat
+            if chat.type not in [ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP]:
+                return
+            
+            # Send response
+            username = self.bot_info.username if self.bot_info else "bot"
+            group_link = f"https://t.me/{username}?startgroup=true"
+            
             keyboard = [
                 [
                     InlineKeyboardButton("Updates", url="https://t.me/WorkGlows"),
                     InlineKeyboardButton("Support", url="https://t.me/TheCryptoElders"),
                 ],
-                [InlineKeyboardButton("Add to Group", url=group_invite_url)],
+                [InlineKeyboardButton("Add to Group", url=group_link)],
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            markup = InlineKeyboardMarkup(keyboard)
             
-            # Create welcome message
-            welcome_text = (
-                f"Group Activity Bot Active\n\n"
-                f"What I do:\n"
-                f"• Simulate {self.action} actions\n"
-                f"• Keep your group active and visible\n"
-                f"• Maintain conversation flow\n\n"
-                f"Bot is now running in this chat!\n"
-                f"Activity simulation will continue automatically."
+            text = (
+                f"Activity Bot Running\n\n"
+                f"Function:\n"
+                f"• Simulates {self.action}\n"
+                f"• Keeps groups active\n"
+                f"• Maintains visibility\n\n"
+                f"Bot active in this chat\n"
+                f"Simulation runs automatically"
             )
             
-            # Send response
-            await update.message.reply_text(
-                welcome_text,
-                reply_markup=reply_markup
+            await self.bot.send_message(
+                chat_id=chat.id,
+                text=text,
+                reply_markup=markup
             )
             
-            # Start simulation for this chat
-            await self.start_chat_simulation(chat.id)
-            logger.info(f"Started simulation for chat {chat.id} with {self.action}")
+            # Start simulation
+            await self.start_simulation(chat.id)
+            logger.info(f"Simulation started for chat {chat.id}")
             
         except Exception as e:
-            logger.error(f"Error in start command: {e}")
-            try:
-                await update.message.reply_text("Something went wrong. Please try again.")
-            except:
-                pass
+            logger.error(f"Handle update error: {e}")
     
-    async def start_chat_simulation(self, chat_id: int):
-        """Start action simulation for a specific chat"""
-        # Cancel existing simulation if running
-        if chat_id in self.active_simulations:
-            self.active_simulations[chat_id].cancel()
-            try:
-                await self.active_simulations[chat_id]
-            except asyncio.CancelledError:
-                pass
+    async def start_simulation(self, chat_id: int):
+        """Start simulation"""
+        if chat_id in self.simulations:
+            self.simulations[chat_id].cancel()
         
-        # Start new simulation task
-        self.active_simulations[chat_id] = asyncio.create_task(
-            self.simulation_loop(chat_id)
+        self.simulations[chat_id] = asyncio.create_task(
+            self.simulate_loop(chat_id)
         )
     
-    async def simulation_loop(self, chat_id: int):
-        """Continuous action simulation for a chat"""
+    async def simulate_loop(self, chat_id: int):
+        """Simulation loop"""
         try:
-            while not shutdown_event.is_set() and self.is_running:
+            while not shutdown_signal.is_set() and self.running:
                 try:
-                    if self.app and self.app.bot:
-                        await self.app.bot.send_chat_action(
-                            chat_id=chat_id,
-                            action=self.action
-                        )
-                    
-                    # Wait 5 seconds between actions
+                    await self.bot.send_chat_action(chat_id, self.action)
                     await asyncio.sleep(5.0)
-                    
-                except (NetworkError, BadRequest) as e:
-                    logger.debug(f"API error for chat {chat_id}: {e}")
+                except (NetworkError, BadRequest):
                     await asyncio.sleep(10.0)
-                    
-                except Exception as e:
-                    logger.debug(f"Simulation error for chat {chat_id}: {e}")
+                except Exception:
                     await asyncio.sleep(5.0)
-                    
         except asyncio.CancelledError:
-            logger.info(f"Simulation cancelled for chat {chat_id}")
-        except Exception as e:
-            logger.error(f"Unexpected error in simulation for chat {chat_id}: {e}")
+            pass
         finally:
-            # Clean up
-            if chat_id in self.active_simulations:
-                del self.active_simulations[chat_id]
+            self.simulations.pop(chat_id, None)
     
-    async def start_bot(self):
-        """Start the bot and begin polling"""
-        try:
-            self.is_running = True
-            
-            # Start application
-            await self.app.start()
-            
-            # Start polling
-            await self.app.updater.start_polling(
-                poll_interval=2.0,
-                timeout=20,
-                bootstrap_retries=3,
-                read_timeout=20,
-                write_timeout=20,
-                connect_timeout=20,
-                pool_timeout=20,
-                drop_pending_updates=True
-            )
-            
-            logger.info(f"Bot polling started for {self.action}")
-            
-            # Keep running
-            while not shutdown_event.is_set() and self.is_running:
-                await asyncio.sleep(1)
+    async def poll_updates(self):
+        """Direct polling for updates"""
+        while not shutdown_signal.is_set() and self.running:
+            try:
+                updates = await self.bot.get_updates(
+                    offset=self.offset,
+                    timeout=10,
+                    limit=100
+                )
                 
-        except Exception as e:
-            logger.error(f"Error starting bot for {self.action}: {e}")
-        finally:
-            await self.stop_bot()
+                for update in updates:
+                    self.offset = update.update_id + 1
+                    await self.handle_update(update.to_dict())
+                
+                if not updates:
+                    await asyncio.sleep(1)
+                    
+            except Exception as e:
+                logger.debug(f"Poll error for {self.action}: {e}")
+                await asyncio.sleep(5)
     
-    async def stop_bot(self):
-        """Stop bot and clean up"""
+    async def run(self):
+        """Run bot"""
         try:
-            self.is_running = False
+            self.running = True
+            logger.info(f"Bot started for {self.action}")
+            await self.poll_updates()
+        except Exception as e:
+            logger.error(f"Run error for {self.action}: {e}")
+        finally:
+            await self.cleanup()
+    
+    async def cleanup(self):
+        """Cleanup"""
+        try:
+            self.running = False
             
             # Cancel simulations
-            simulation_tasks = list(self.active_simulations.values())
-            for task in simulation_tasks:
+            for task in list(self.simulations.values()):
                 task.cancel()
             
-            # Wait for completion
-            if simulation_tasks:
-                await asyncio.gather(*simulation_tasks, return_exceptions=True)
+            if self.simulations:
+                await asyncio.gather(*self.simulations.values(), return_exceptions=True)
             
-            self.active_simulations.clear()
-            
-            # Stop application
-            if self.app:
-                await self.app.updater.stop()
-                await self.app.stop()
-                await self.app.shutdown()
-            
-            logger.info(f"Bot stopped for {self.action}")
-            
+            logger.info(f"Bot cleaned up for {self.action}")
         except Exception as e:
-            logger.error(f"Error stopping bot: {e}")
+            logger.error(f"Cleanup error: {e}")
 
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    """HTTP handler for Render health monitoring"""
+def run_bot_thread(token: str, action: ChatAction):
+    """Run bot in thread"""
+    async def bot_main():
+        bot = BotInstance(token, action)
+        active_bots.append(bot)
+        
+        try:
+            if await bot.initialize():
+                await bot.run()
+        except Exception as e:
+            logger.error(f"Bot thread error: {e}")
+        finally:
+            if bot in active_bots:
+                active_bots.remove(bot)
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(bot_main())
+    except Exception as e:
+        logger.error(f"Thread error: {e}")
+    finally:
+        loop.close()
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    """Health check handler"""
     
     def do_GET(self):
         self.send_response(200)
@@ -276,16 +252,15 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         
-        # Calculate statistics
-        running_bots = len([bot for bot in bot_instances if bot.is_running])
-        total_simulations = sum(len(bot.active_simulations) for bot in bot_instances)
+        running = len([b for b in active_bots if b.running])
+        sims = sum(len(b.simulations) for b in active_bots)
         
         status = (
             f"Telegram Multi-Bot Service\n"
-            f"Running bots: {running_bots}/{len(bot_instances)}\n"
-            f"Active simulations: {total_simulations}\n"
-            f"Configured tokens: {len(BOT_TOKENS)}\n"
-            f"Health: {'OK' if running_bots > 0 else 'STARTING'}\n"
+            f"Running: {running}/{len(active_bots)}\n"
+            f"Simulations: {sims}\n"
+            f"Tokens: {len(BOT_TOKENS)}\n"
+            f"Status: OK\n"
         )
         
         self.wfile.write(status.encode())
@@ -298,124 +273,80 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         pass
 
 
-def run_bot_in_thread(token: str, action: ChatAction):
-    """Run individual bot in dedicated thread"""
-    async def run_bot_async():
-        bot = TelegramBot(token, action)
-        bot_instances.append(bot)
-        
-        try:
-            if await bot.initialize():
-                await bot.start_bot()
-        except Exception as e:
-            logger.error(f"Critical error in bot thread: {e}")
-        finally:
-            if bot in bot_instances:
-                bot_instances.remove(bot)
-    
-    # Create event loop for thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(run_bot_async())
-    except Exception as e:
-        logger.error(f"Thread error: {e}")
-    finally:
-        loop.close()
-
-
-def start_health_server():
-    """Start HTTP server for health monitoring"""
-    global health_server
+def start_server():
+    """Start HTTP server"""
+    global http_server
     port = int(os.environ.get("PORT", 5000))
     
     try:
-        health_server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-        logger.info(f"Health server listening on port {port}")
-        health_server.serve_forever()
+        http_server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        logger.info(f"Server on port {port}")
+        http_server.serve_forever()
     except Exception as e:
-        logger.error(f"Health server error: {e}")
+        logger.error(f"Server error: {e}")
 
 
 def signal_handler(signum, frame):
-    """Handle shutdown signals"""
-    logger.info(f"Received signal {signum}, shutting down")
-    shutdown_event.set()
+    """Handle signals"""
+    logger.info("Shutting down")
+    shutdown_signal.set()
     
-    if health_server:
-        health_server.shutdown()
+    if http_server:
+        http_server.shutdown()
     
-    time.sleep(3)
+    time.sleep(2)
     sys.exit(0)
 
 
 def main():
-    """Main application entry point"""
+    """Main function"""
     logger.info("=== Telegram Multi-Bot Service ===")
-    logger.info(f"Python: {sys.version}")
-    logger.info(f"Bot tokens: {len(BOT_TOKENS)}")
-    logger.info(f"Available actions: {len(CHAT_ACTIONS)}")
+    logger.info(f"Tokens: {len(BOT_TOKENS)}")
+    logger.info(f"Actions: {len(ACTIONS)}")
     
-    # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        # Start health server
-        health_thread = threading.Thread(
-            target=start_health_server,
-            daemon=True,
-            name="HealthServer"
+        # Start server
+        server_thread = threading.Thread(
+            target=start_server,
+            daemon=True
         )
-        health_thread.start()
-        logger.info("Health server started")
+        server_thread.start()
         
-        # Start bot threads
-        bot_threads = []
-        tokens_to_use = BOT_TOKENS[:len(CHAT_ACTIONS)]
-        actions_to_use = CHAT_ACTIONS[:len(tokens_to_use)]
+        # Start bots
+        threads = []
+        tokens = BOT_TOKENS[:len(ACTIONS)]
+        actions = ACTIONS[:len(tokens)]
         
-        for i, (token, action) in enumerate(zip(tokens_to_use, actions_to_use)):
-            # Stagger starts
+        for i, (token, action) in enumerate(zip(tokens, actions)):
             if i > 0:
-                time.sleep(3)
+                time.sleep(2)
             
             thread = threading.Thread(
-                target=run_bot_in_thread,
+                target=run_bot_thread,
                 args=(token, action),
-                daemon=True,
-                name=f"Bot-{action}"
+                daemon=True
             )
-            bot_threads.append(thread)
+            threads.append(thread)
             thread.start()
-            logger.info(f"Started bot thread for {action}")
+            logger.info(f"Started {action}")
         
-        logger.info(f"All {len(bot_threads)} bots started")
+        logger.info(f"All {len(threads)} bots started")
         
-        # Main loop
-        while not shutdown_event.is_set():
+        # Keep running
+        while not shutdown_signal.is_set():
             time.sleep(1)
-            
-            # Monitor threads
-            alive_threads = [t for t in bot_threads if t.is_alive()]
-            if len(alive_threads) < len(bot_threads):
-                logger.warning(f"Thread health: {len(alive_threads)}/{len(bot_threads)} alive")
         
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt")
     except Exception as e:
-        logger.error(f"Application error: {e}")
+        logger.error(f"Main error: {e}")
         return 1
     finally:
-        logger.info("Shutting down")
-        shutdown_event.set()
-        
-        if health_server:
-            health_server.shutdown()
-        
-        time.sleep(2)
-        logger.info("Shutdown complete")
+        shutdown_signal.set()
+        if http_server:
+            http_server.shutdown()
+        time.sleep(1)
     
     return 0
 

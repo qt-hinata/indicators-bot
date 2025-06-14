@@ -1,29 +1,20 @@
 import asyncio
 import os
 import threading
-
-# ─── Workaround for PTB v20.7+ Updater __slots__ bug ───────────────────────────
-import telegram.ext._updater as _updater_mod
-
-# If Updater uses __slots__, extend them so we can assign __polling_cleanup_cb
-if hasattr(_updater_mod.Updater, "__slots__"):
-    _updater_mod.Updater.__slots__ = tuple(
-        list(_updater_mod.Updater.__slots__) + ["_Updater__polling_cleanup_cb"]
-    )
-
-# ─── Telegram Bot & HTTP Server Imports ───────────────────────────────────────
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.constants import ChatAction, ChatType
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# ------------- Telegram‐bot SETUP -------------
-# Read tokens from environment variable (comma-separated)
+# ─── Read Tokens ────────────────────────────────────────────────────────────
 BOT_TOKENS = os.getenv("BOT_TOKENS", "").split(",")
 if not BOT_TOKENS or BOT_TOKENS == [""]:
     raise ValueError("No bot tokens found. Set BOT_TOKENS environment variable.")
 
-# All available Telegram chat indicators
 ACTIONS = [
     ChatAction.TYPING,
     ChatAction.UPLOAD_PHOTO,
@@ -38,7 +29,7 @@ ACTIONS = [
     ChatAction.UPLOAD_VIDEO_NOTE,
 ]
 
-# ------------- Simulate “typing”/“uploading” actions -------------
+# ─── Typing Simulation ───────────────────────────────────────────────────────
 async def simulate_action(chat_id: int, app, action: ChatAction):
     try:
         while True:
@@ -47,15 +38,13 @@ async def simulate_action(chat_id: int, app, action: ChatAction):
     except asyncio.CancelledError:
         pass
 
-# ------------- Run a single bot instance -------------
-async def run_bot(token: str, action: ChatAction):
-    # Build the Application
+# ─── Bot Runner ──────────────────────────────────────────────────────────────
+async def run_bot(token, action: ChatAction):
     app = ApplicationBuilder().token(token).build()
 
-    # /start handler: sends welcome text + buttons, then starts simulate_action loop
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat = update.effective_chat
-        if chat.type not in (ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP):
+        if chat.type not in [ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP]:
             return
 
         bot_username = context.bot.username
@@ -66,8 +55,11 @@ async def run_bot(token: str, action: ChatAction):
                 InlineKeyboardButton(text="Updates", url="https://t.me/WorkGlows"),
                 InlineKeyboardButton(text="Support", url="https://t.me/TheCryptoElders"),
             ],
-            [InlineKeyboardButton(text="Add Me To Your Group", url=add_to_group_url)],
+            [
+                InlineKeyboardButton(text="Add Me To Your Group", url=add_to_group_url),
+            ],
         ]
+
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         welcome_text = (
@@ -79,11 +71,8 @@ async def run_bot(token: str, action: ChatAction):
             "🚀 <b>Tap /start to begin the magic.</b>\n"
             "👇 Or use the buttons below for support and adding me to your group!"
         )
-        await update.message.reply_text(
-            welcome_text,
-            reply_markup=reply_markup,
-            parse_mode="HTML",
-        )
+
+        await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="HTML")
 
         chat_id = chat.id
         task_key = f"{context.bot.token}_{chat_id}"
@@ -92,30 +81,18 @@ async def run_bot(token: str, action: ChatAction):
                 simulate_action(chat_id, context.application, action)
             )
 
-    # Register handler
     app.add_handler(CommandHandler("start", start))
 
-    # Initialize & set commands menu
     await app.initialize()
-    await app.bot.set_my_commands([
-        BotCommand(command="start", description="Show welcome & buttons")
-    ])
-
+    await app.bot.set_my_commands([BotCommand("start", "Show welcome & buttons")])
     bot_user = await app.bot.get_me()
     print(f"Bot with token {token[:8]}... is running as @{bot_user.username}")
 
-    # Start polling (handles init → start → poll → idle → stop)
+    await app.start()
     await app.run_polling()
     return app
 
-# ------------- Main entrypoint -------------
-async def main():
-    # Launch one bot per token/action pair
-    await asyncio.gather(
-        *(run_bot(token, action) for token, action in zip(BOT_TOKENS, ACTIONS))
-    )
-
-# ─── Dummy HTTP Server to Keep Render Happy ─────────────────────────────────
+# ─── Dummy HTTP Server for Render ────────────────────────────────────────────
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -132,7 +109,14 @@ def start_dummy_server():
     print(f"Dummy server listening on port {port}")
     server.serve_forever()
 
+# ─── Main Entrypoint ─────────────────────────────────────────────────────────
+async def main():
+    apps = await asyncio.gather(
+        *(run_bot(token, action) for token, action in zip(BOT_TOKENS, ACTIONS))
+    )
+    while True:
+        await asyncio.sleep(3600)
+
 if __name__ == "__main__":
-    # Start dummy HTTP server for health checks
     threading.Thread(target=start_dummy_server, daemon=True).start()
     asyncio.run(main())

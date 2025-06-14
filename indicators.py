@@ -10,7 +10,6 @@ from telegram.ext import (
 )
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# ─── Read Tokens ────────────────────────────────────────────────────────────
 BOT_TOKENS = os.getenv("BOT_TOKENS", "").split(",")
 if not BOT_TOKENS or BOT_TOKENS == [""]:
     raise ValueError("No bot tokens found. Set BOT_TOKENS environment variable.")
@@ -29,7 +28,6 @@ ACTIONS = [
     ChatAction.UPLOAD_VIDEO_NOTE,
 ]
 
-# ─── Typing Simulation ───────────────────────────────────────────────────────
 async def simulate_action(chat_id: int, app, action: ChatAction):
     try:
         while True:
@@ -38,7 +36,6 @@ async def simulate_action(chat_id: int, app, action: ChatAction):
     except asyncio.CancelledError:
         pass
 
-# ─── Bot Runner ──────────────────────────────────────────────────────────────
 async def run_bot(token, action: ChatAction):
     app = ApplicationBuilder().token(token).build()
 
@@ -89,10 +86,10 @@ async def run_bot(token, action: ChatAction):
     print(f"Bot with token {token[:8]}... is running as @{bot_user.username}")
 
     await app.start()
-    await app.run_polling()
+    asyncio.create_task(app.run_polling())  # Don't await — avoids closing loop
     return app
 
-# ─── Dummy HTTP Server for Render ────────────────────────────────────────────
+# Dummy server
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -109,14 +106,13 @@ def start_dummy_server():
     print(f"Dummy server listening on port {port}")
     server.serve_forever()
 
-# ─── Main Entrypoint ─────────────────────────────────────────────────────────
-async def main():
-    apps = await asyncio.gather(
-        *(run_bot(token, action) for token, action in zip(BOT_TOKENS, ACTIONS))
-    )
-    while True:
-        await asyncio.sleep(3600)
+# Entrypoint using asyncio.create_task (NOT asyncio.run)
+async def startup():
+    for token, action in zip(BOT_TOKENS, ACTIONS):
+        await run_bot(token, action)
 
 if __name__ == "__main__":
     threading.Thread(target=start_dummy_server, daemon=True).start()
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.create_task(startup())
+    loop.run_forever()

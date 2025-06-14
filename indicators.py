@@ -1,13 +1,20 @@
 import asyncio
 import os
 import threading
+
+# ─── Workaround for PTB v20.7+ Updater __slots__ bug ───────────────────────────
+import telegram.ext._updater as _updater_mod
+
+# If Updater uses __slots__, extend them so we can assign __polling_cleanup_cb
+if hasattr(_updater_mod.Updater, "__slots__"):
+    _updater_mod.Updater.__slots__ = tuple(
+        list(_updater_mod.Updater.__slots__) + ["_Updater__polling_cleanup_cb"]
+    )
+
+# ─── Telegram Bot & HTTP Server Imports ───────────────────────────────────────
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.constants import ChatAction, ChatType
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes,
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ------------- Telegram‐bot SETUP -------------

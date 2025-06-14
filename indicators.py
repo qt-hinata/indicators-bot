@@ -1,8 +1,3 @@
-"""
-Telegram Multi-Bot Service for Render Deployment
-Direct polling implementation that avoids Updater API issues
-"""
-
 import asyncio
 import os
 import logging
@@ -100,6 +95,7 @@ class BotInstance:
                 return
             
             message = update.message
+            # Only respond to /start commands
             if not message.text or not message.text.startswith('/start'):
                 return
             
@@ -107,36 +103,57 @@ class BotInstance:
             if chat.type not in [ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP]:
                 return
             
-            # Send response
+            # Construct the "Add Me To Your Group" URL
             username = self.bot_info.username if self.bot_info else "bot"
-            group_link = f"https://t.me/{username}?startgroup=true"
+            add_to_group_url = f"https://t.me/{username}?startgroup=true"
             
+            # Build the keyboard with updated button text
             keyboard = [
                 [
-                    InlineKeyboardButton("Updates", url="https://t.me/WorkGlows"),
-                    InlineKeyboardButton("Support", url="https://t.me/TheCryptoElders"),
+                    InlineKeyboardButton(text="Updates", url="https://t.me/WorkGlows"),
+                    InlineKeyboardButton(text="Support", url="https://t.me/TheCryptoElders"),
                 ],
-                [InlineKeyboardButton("Add to Group", url=group_link)],
+                [
+                    InlineKeyboardButton(
+                        text="Add Me To Your Group",
+                        url=add_to_group_url,
+                    ),
+                ],
             ]
-            markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
-            text = (
-                f"Activity Bot Running\n\n"
-                f"Function:\n"
-                f"• Simulates {self.action}\n"
-                f"• Keeps groups active\n"
-                f"• Maintains visibility\n\n"
-                f"Bot active in this chat\n"
-                f"Simulation runs automatically"
+            # Prepare user mention via HTML link
+            user = message.from_user
+            # Use first_name if available, otherwise username or fallback text
+            if user.first_name:
+                display_name = user.first_name
+            elif user.username:
+                display_name = f"@{user.username}"
+            else:
+                display_name = "there"
+            user_mention = f'<a href="tg://user?id={user.id}">{display_name}</a>'
+
+            # Rich welcome text with emojis, HTML formatting, and user mention
+            welcome_text = (
+                f"👋 Hello {user_mention}! I'm here to keep your group active and engaging.\n\n"
+                f"✨ <b>What I do:</b>\n"
+                f"• Simulate typing, uploading, and more to boost visibility\n"
+                f"• Help maintain conversation flow in your groups\n"
+                f"• Super simple to set up—just add and go!\n\n"
+                f"⚙️ <b>Action:</b> Simulates {self.action}\n\n"
+                f"🚀 <b>Tap /start to begin the magic.</b>\n"
+                f"👇 Or use the buttons below for support and adding me to your group!"
             )
             
+            # Send the message with HTML parse mode
             await self.bot.send_message(
                 chat_id=chat.id,
-                text=text,
-                reply_markup=markup
+                text=welcome_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
             )
             
-            # Start simulation
+            # Start simulation if not already running
             await self.start_simulation(chat.id)
             logger.info(f"Simulation started for chat {chat.id}")
             

@@ -85,7 +85,7 @@ async def run_bot(token, action: ChatAction):
     print(f"Started bot: @{bot_user.username}")
 
     await app.start()
-    await app.run_polling(close_loop=False)  # ✅ FIX: don't close the global loop
+    await app.run_polling(close_loop=False)  # leave loop open
 
 # ───── Dummy Server for Render ─────
 class DummyHandler(BaseHTTPRequestHandler):
@@ -106,17 +106,13 @@ def start_dummy_server():
 
 # ───── Entrypoint ─────
 async def main():
-    await asyncio.gather(*(run_bot(token, action) for token, action in zip(BOT_TOKENS, ACTIONS)))
+    tasks = []
+    for token, action in zip(BOT_TOKENS, ACTIONS):
+        tasks.append(run_bot(token, action))
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     threading.Thread(target=start_dummy_server, daemon=True).start()
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if "already running" in str(e):
-            # Fallback for environments where loop is already running
-            loop = asyncio.get_event_loop()
-            loop.create_task(main())
-            loop.run_forever()
-        else:
-            raise
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())
+    loop.run_forever()

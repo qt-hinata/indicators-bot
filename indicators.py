@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+# ───── Load Tokens and Define Actions ─────
 BOT_TOKENS = os.getenv("BOT_TOKENS", "").split(",")
 if not BOT_TOKENS or BOT_TOKENS == [""]:
     raise ValueError("No bot tokens found. Set BOT_TOKENS environment variable.")
@@ -28,6 +29,7 @@ ACTIONS = [
     ChatAction.UPLOAD_VIDEO_NOTE,
 ]
 
+# ───── Simulate Chat Actions Loop ─────
 async def simulate_action(chat_id: int, app, action: ChatAction):
     try:
         while True:
@@ -36,6 +38,7 @@ async def simulate_action(chat_id: int, app, action: ChatAction):
     except asyncio.CancelledError:
         pass
 
+# ───── Bot Setup ─────
 async def run_bot(token, action: ChatAction):
     app = ApplicationBuilder().token(token).build()
 
@@ -81,15 +84,15 @@ async def run_bot(token, action: ChatAction):
     app.add_handler(CommandHandler("start", start))
 
     await app.initialize()
-    await app.bot.set_my_commands([BotCommand("start", "Show welcome & buttons")])
+    await app.bot.set_my_commands([BotCommand("start", "Show welcome message")])
     bot_user = await app.bot.get_me()
-    print(f"Bot with token {token[:8]}... is running as @{bot_user.username}")
+    print(f"Started bot: @{bot_user.username}")
 
     await app.start()
-    asyncio.create_task(app.run_polling())  # Don't await — avoids closing loop
-    return app
+    await app.run_polling()  # ✅ DIRECTLY await this — never put in a task
+    await app.stop()
 
-# Dummy server
+# ───── Dummy Server for Render ─────
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -106,13 +109,10 @@ def start_dummy_server():
     print(f"Dummy server listening on port {port}")
     server.serve_forever()
 
-# Entrypoint using asyncio.create_task (NOT asyncio.run)
-async def startup():
-    for token, action in zip(BOT_TOKENS, ACTIONS):
-        await run_bot(token, action)
+# ───── Main Entrypoint ─────
+async def main():
+    await asyncio.gather(*(run_bot(token, action) for token, action in zip(BOT_TOKENS, ACTIONS)))
 
 if __name__ == "__main__":
     threading.Thread(target=start_dummy_server, daemon=True).start()
-    loop = asyncio.get_event_loop()
-    loop.create_task(startup())
-    loop.run_forever()
+    asyncio.run(main())

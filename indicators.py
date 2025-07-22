@@ -222,7 +222,7 @@ class BotInstance:
             welcome_text = f"""
 👋 Hello {user_mention}, welcome!
 
-I display fun activity indicators in groups and private chats. Use the buttons below for help or to add me to your group! 💘
+I display fun activity indicators in groups and private chats! 💘
 
 <blockquote>⚙️ Now Simulating: {action_display}</blockquote>
 
@@ -287,7 +287,7 @@ Ok {user_mention}, simulation stopped! 💫
 
 The activity indicators have been turned off for now. 💡
 
-<blockquote>✨ Simulation Disabled: {self.action}</blockquote>
+<blockquote>✨ Simulation Disabled: {action_display}</blockquote>
 
 💕 Just use /start anytime to resume!
 """

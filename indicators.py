@@ -219,18 +219,15 @@ class BotInstance:
 
             # Rich welcome text with emojis, HTML formatting, and user mention
             action_display = ACTION_DISPLAY_NAMES.get(self.action, str(self.action))
-            welcome_text = (
-                f"👋 Hello {user_mention}! I'm here to keep your group active and engaging.\n\n"
-                f"✨ <b>What I do:</b>\n"
-                f"• Simulate typing, uploading, and more to boost visibility\n"
-                f"• Help maintain conversation flow in your groups\n"
-                f"• Super simple to set up—just add and go!\n\n"
-                f"⚙️ <b>Action:</b> Simulates {action_display}\n\n"
-                f"🚀 <b>Commands:</b>\n"
-                f"• /start - Begin the simulation magic\n"
-                f"• /end - Stop the simulation\n\n"
-                f"👇 Or use the buttons below for support and adding me to your group!"
-            )
+            welcome_text = f"""
+👋 Hello {user_mention}, welcome!
+
+I display fun activity indicators in groups and private chats. Use the buttons below for help or to add me to your group! 💘
+
+<blockquote>⚙️ Now Simulating: {action_display}</blockquote>
+
+💬 <i>Press /end to stop the simulation!</i>
+"""
 
             # Send the photo with caption and keyboard
             await self.bot.send_photo(
@@ -249,17 +246,15 @@ class BotInstance:
             logger.error(f"Start command error: {e}")
             # Fallback to text message if photo fails
             try:
-                welcome_text = (
-                    f"👋 Hello! I'm here to keep your group active and engaging.\n\n"
-                    f"✨ <b>What I do:</b>\n"
-                    f"• Simulate typing, uploading, and more to boost visibility\n"
-                    f"• Help maintain conversation flow in your groups\n"
-                    f"• Super simple to set up—just add and go!\n\n"
-                    f"⚙️ <b>Action:</b> Simulates {ACTION_DISPLAY_NAMES.get(self.action, str(self.action))}\n\n"
-                    f"🚀 <b>Commands:</b>\n"
-                    f"• /start - Begin the simulation magic\n"
-                    f"• /end - Stop the simulation"
-                )
+                welcome_text = f"""
+👋 Hello {user_mention}, welcome!
+
+I display fun activity indicators in groups and private chats. Use the buttons below for help or to add me to your group! 💘
+
+<blockquote>⚙️ Now Simulating: {action_display}</blockquote>
+
+💬 Press /end to stop the simulation
+"""
                 
                 await self.bot.send_message(
                     chat_id=chat.id,
@@ -287,19 +282,25 @@ class BotInstance:
             simulation_stopped = await self.stop_simulation(chat.id)
 
             if simulation_stopped:
-                end_text = (
-                    f"🛑 {user_mention}, simulation stopped successfully!\n\n"
-                    f"✅ <b>What happened:</b>\n"
-                    f"• Activity simulation has been disabled\n"
-                    f"• The bot will no longer simulate {self.action}\n\n"
-                    f"💡 <b>Want to restart?</b> Just use /start anytime!\n"
-                    f"📞 Need help? Contact our support team."
-                )
+                end_text = f"""
+Ok {user_mention}, simulation stopped! 💫
+
+The activity indicators have been turned off for now. 💡
+
+<blockquote>✨ Simulation Disabled: {self.action}</blockquote>
+
+💕 Just use /start anytime to resume!
+"""
             else:
-                end_text = (
-                    f"ℹ️ {user_mention}, no active simulation found to stop.\n\n"
-                    f"💡 Use /start to begin a new simulation!"
-                )
+                end_text = f"""
+{user_mention}, no active simulation found to stop. 💫
+
+There was nothing running to disable right now. 💡
+
+<blockquote>✨ No simulation active</blockquote>
+
+💕 Use /start to begin anytime!
+"""
 
             await self.bot.send_message(
                 chat_id=chat.id,

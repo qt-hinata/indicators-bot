@@ -287,7 +287,7 @@ Ok {user_mention}, simulation stopped! 💫
 
 The activity indicators have been turned off for now. 💡
 
-<blockquote>✨ Simulation Disabled: {action_display}</blockquote>
+<blockquote>✨ Simulation Disabled: {self.action}</blockquote>
 
 💕 Just use /start anytime to resume!
 """

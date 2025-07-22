@@ -313,51 +313,36 @@ class BotInstance:
             logger.error(f"End command error: {e}")
 
     async def handle_ping_command(self, chat, user):
-        """Handle /ping command (hidden from menu)"""
-        try:
-            import time
-            start_time = time.time()
-            
-            # Prepare user mention
-            if user.first_name:
-                display_name = user.first_name
-            elif user.username:
-                display_name = f"@{user.username}"
-            else:
-                display_name = "there"
-            user_mention = f'<a href="tg://user?id={user.id}">{display_name}</a>'
-            
-            # Send initial ping message
-            ping_message = await self.bot.send_message(
-                chat_id=chat.id,
-                text="🏓 Calculating ping...",
-                parse_mode="HTML"
-            )
-            
-            # Calculate response time
-            end_time = time.time()
-            response_time = round((end_time - start_time) * 1000, 2)  # Convert to milliseconds
-            
-            # Update message with actual ping
-            ping_text = (
-                f"🏓 <b>Pong!</b> {user_mention}\n\n"
-                f"⚡ <b>Response Time:</b> {response_time}ms\n"
-                f"🤖 <b>Bot Status:</b> Online & Active\n"
-                f"📡 <b>Action:</b> {ACTION_DISPLAY_NAMES.get(self.action, str(self.action))}\n"
-                f"🔄 <b>Active Simulations:</b> {len(self.simulations)}"
-            )
-            
-            await self.bot.edit_message_text(
-                chat_id=chat.id,
-                message_id=ping_message.message_id,
-                text=ping_text,
-                parse_mode="HTML"
-            )
-            
-            logger.info(f"Ping command processed for chat {chat.id}, response time: {response_time}ms")
+    """Handle /ping command (hidden from menu)"""
+    try:
+        start_time = time.time()
+        
+        # Send initial ping message
+        ping_message = await self.bot.send_message(
+            chat_id=chat.id,
+            text="🛰️ Pinging...",
+            parse_mode="HTML"
+        )
+        
+        # Calculate response time
+        end_time = time.time()
+        response_time = round((end_time - start_time) * 1000, 2)  # Convert to milliseconds
+        
+        # Update message with actual ping
+        ping_text = f'🏓 <a href="https://t.me/SoulMeetsHQ">Pong!</a> {response_time}ms'
+        
+        await self.bot.edit_message_text(
+            chat_id=chat.id,
+            message_id=ping_message.message_id,
+            text=ping_text,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+        
+        logger.info(f"Ping command processed for chat {chat.id}, response time: {response_time}ms")
 
-        except Exception as e:
-            logger.error(f"Ping command error: {e}")
+    except Exception as e:
+        logger.error(f"Ping command error: {e}")
 
     async def start_simulation(self, chat_id: int):
         """Start simulation"""
